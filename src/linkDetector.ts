@@ -2,7 +2,7 @@ import { TFile, App } from 'obsidian';
 
 /* -------------------- LINK DETECTOR -------------------- */
 
-type LinkType = 'markdown' | 'wiki' | 'wikiTransclusion' | 'mdTransclusion';
+type LinkType = 'markdown' | 'wiki' | 'wikiTransclusion' | 'mdTransclusion' | 'htmlImage';
 
 export interface LinkMatch {
     type: LinkType;
@@ -100,6 +100,24 @@ export const getAllLinkMatchesInFile = async (mdFile: TFile, app: App, fileText?
             }
         }
     }
+
+    // --> Get All HTML img Links
+    const htmlImageTagRegex = /<img\b[^>]*>/gi;
+    let htmlImageTagMatch: RegExpExecArray | null;
+    while ((htmlImageTagMatch = htmlImageTagRegex.exec(fileText)) !== null) {
+        let srcPath = getHtmlImageFileName(htmlImageTagMatch[0]);
+        if (!srcPath) continue;
+        let decodedSrcPath = tryDecodeURIComponent(srcPath);
+        let file = app.metadataCache.getFirstLinkpathDest(decodedSrcPath, mdFile.path);
+
+        let linkMatch: LinkMatch = {
+            type: 'htmlImage',
+            match: htmlImageTagMatch[0],
+            linkText: file ? file.path : decodedSrcPath,
+            sourceFilePath: mdFile.path,
+        };
+        linkMatches.push(linkMatch);
+    }
     return linkMatches;
 };
 
@@ -111,12 +129,19 @@ const wikiTransclusionFileNameRegex = /(?<=\[\[)(.*)(?=#)/;
 const mdTransclusionRegex = /\[.*?]\((.*?)#.*?\)/;
 const mdTransclusionFileNameRegex = /(?<=\]\()(.*)(?=#)/;
 
+const htmlImageRegex = /<img\b[^>]*>/i;
+const htmlImageFileNameRegex = /\bsrc\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s"'<>]+))/i;
+
 const matchIsWikiTransclusion = (match: string): boolean => {
     return wikiTransclusionRegex.test(match);
 };
 
 const matchIsMdTransclusion = (match: string): boolean => {
     return mdTransclusionRegex.test(match);
+};
+
+const matchIsHtmlImage = (match: string): boolean => {
+    return htmlImageRegex.test(match);
 };
 
 /**
@@ -131,4 +156,33 @@ const getTransclusionFileName = (match: string): string => {
         if (fileNameMatch) return fileNameMatch[0];
     }
     return '';
+};
+
+/**
+ * Extracts the `src` value from an HTML `<img>` tag.
+ * @param match Full HTML <img> tag text.
+ * @returns Trimmed image path if a `src` attribute exists, otherwise an empty string.
+ */
+const getHtmlImageFileName = (match: string): string => {
+    if (matchIsHtmlImage(match)) {
+        let fileNameMatch = match.match(htmlImageFileNameRegex);
+        if (fileNameMatch) {
+            const [, doubleQuotedSrc, singleQuotedSrc, unquotedSrc] = fileNameMatch;
+            return (doubleQuotedSrc || singleQuotedSrc || unquotedSrc || '').trim();
+        }
+    }
+
+    return '';
+};
+
+/**
+ * @param value URI-encoded or plain text value.
+ * @returns Decoded value, or the original string if decoding throws.
+ */
+const tryDecodeURIComponent = (value: string): string => {
+    try {
+        return decodeURIComponent(value);
+    } catch {
+        return value;
+    }
 };
