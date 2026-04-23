@@ -18,7 +18,7 @@ export interface LinkMatch {
  * @param fileText : Optional, If file is not Md format, provide fileText to scan
  * @returns Promise<LinkMatch[]>
  */
-export const getAllLinkMatchesInFile = async (mdFile: TFile, app: App, fileText?: String): Promise<LinkMatch[]> => {
+export const getAllLinkMatchesInFile = async (mdFile: TFile, app: App, fileText?: string): Promise<LinkMatch[]> => {
     const linkMatches: LinkMatch[] = [];
     if (fileText === undefined) {
         fileText = await app.vault.read(mdFile);
