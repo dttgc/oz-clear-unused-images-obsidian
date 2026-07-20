@@ -1,4 +1,4 @@
-import { App, TFile } from 'obsidian';
+import { App, TFile, TFolder } from 'obsidian';
 import OzanClearImages from './main';
 import { getAllLinkMatchesInFile, LinkMatch } from './linkDetector';
 
@@ -120,9 +120,10 @@ export const deleteFilesInTheList = async (
     fileList: TFile[],
     plugin: OzanClearImages,
     app: App
-): Promise<{ deletedImages: number; textToView: string }> => {
+): Promise<{ deletedImages: number; deletedFolders: number; textToView: string }> => {
     var deleteOption = plugin.settings.deleteOption;
     var deletedImages = 0;
+    var deletedFolders = 0;
     let textToView = '';
     for (let file of fileList) {
         if (fileIsInExcludedFolder(file, plugin)) {
@@ -141,8 +142,59 @@ export const deleteFilesInTheList = async (
             deletedImages++;
         }
     }
-    return { deletedImages, textToView };
+
+    const sortedFolderPaths = getAllFolderPaths(app).sort(
+        (first, second) => second.split('/').length - first.split('/').length
+    );
+    for (let folderPath of sortedFolderPaths) {
+        const folder = app.vault.getAbstractFileByPath(folderPath);
+        if (
+            folder instanceof TFolder &&
+            !folder.isRoot() &&
+            folder.children.length === 0 &&
+            !folderIsProtected(folder.path, plugin, app)
+        ) {
+            await app.vault.delete(folder);
+            textToView += `[+] Deleted Empty Folder: ` + folderPath + '</br>';
+            deletedFolders++;
+        }
+    }
+
+    return { deletedImages, deletedFolders, textToView };
 };
+
+const getAllFolderPaths = (app: App): string[] => {
+    const folderPaths: string[] = [];
+    const collectFolderPaths = (folder: TFolder) => {
+        for (let child of folder.children) {
+            if (child instanceof TFolder) {
+                folderPaths.push(child.path);
+                collectFolderPaths(child);
+            }
+        }
+    };
+    collectFolderPaths(app.vault.getRoot());
+    return folderPaths;
+};
+
+const folderIsProtected = (folderPath: string, plugin: OzanClearImages, app: App): boolean => {
+    if (pathIsInsideFolder(folderPath, app.vault.configDir) || pathIsInsideFolder(folderPath, '.trash')) {
+        return true;
+    }
+
+    const excludedFolderPaths = plugin.settings.excludedFolders
+        .split(',')
+        .map((folderPath) => folderPath.trim())
+        .filter((folderPath) => folderPath !== '');
+    return excludedFolderPaths.some((excludedFolderPath) =>
+        plugin.settings.excludeSubfolders
+            ? pathIsInsideFolder(folderPath, excludedFolderPath)
+            : folderPath === excludedFolderPath
+    );
+};
+
+const pathIsInsideFolder = (path: string, folderPath: string): boolean =>
+    path === folderPath || path.startsWith(folderPath + '/');
 
 // Check if File is Under Excluded Folders
 const fileIsInExcludedFolder = (file: TFile, plugin: OzanClearImages): boolean => {

@@ -49,19 +49,23 @@ export default class OzanClearImages extends Plugin {
     // Compare Used Images with all images and return unused ones
     clearUnusedAttachments = async (type: 'all' | 'image') => {
         var unusedAttachments: TFile[] = await Util.getUnusedAttachments(this.app, type);
-        var len = unusedAttachments.length;
-        if (len > 0) {
-            let logs = '';
-            logs += `[+] ${Util.getFormattedDate()}: Clearing started.</br>`;
-            Util.deleteFilesInTheList(unusedAttachments, this, this.app).then(({ deletedImages, textToView }) => {
-                logs += textToView;
-                logs += '[+] ' + deletedImages.toString() + ' image(s) in total deleted.</br>';
-                logs += `[+] ${Util.getFormattedDate()}: Clearing completed.`;
-                if (this.settings.logsModal) {
-                    let modal = new LogsModal(logs, this.app);
-                    modal.open();
-                }
-            });
+        let logs = '';
+        logs += `[+] ${Util.getFormattedDate()}: Clearing started.</br>`;
+        const { deletedImages, deletedFolders, textToView } = await Util.deleteFilesInTheList(
+            unusedAttachments,
+            this,
+            this.app
+        );
+        logs += textToView;
+        logs += '[+] ' + deletedImages.toString() + ' image(s) in total deleted.</br>';
+        logs += '[+] ' + deletedFolders.toString() + ' empty folder(s) in total deleted.</br>';
+        logs += `[+] ${Util.getFormattedDate()}: Clearing completed.`;
+
+        if (deletedImages > 0 || deletedFolders > 0) {
+            if (this.settings.logsModal) {
+                let modal = new LogsModal(logs, this.app);
+                modal.open();
+            }
         } else {
             new Notice(`All ${type === 'image' ? 'images' : 'attachments'} are used. Nothing was deleted.`);
         }
